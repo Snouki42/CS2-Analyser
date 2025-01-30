@@ -104,15 +104,28 @@ def main():
     ancient_paths = list_files("dataset/ancient")
     nuke_paths    = list_files("dataset/nuke")
     anubis_paths  = list_files("dataset/anubis")
+    dust2_paths = list_files("dataset/dust2")
+    inferno_paths = list_files("dataset/inferno")
+    mirage_paths = list_files("dataset/mirage")
+    train_paths = list_files("dataset/train")
 
     sig_ancient = build_map_signature(ancient_paths, bins=BINS)
     sig_nuke    = build_map_signature(nuke_paths,    bins=BINS)
     sig_anubis  = build_map_signature(anubis_paths,  bins=BINS)
+    sig_dust2  = build_map_signature(dust2_paths,  bins=BINS)
+    sig_inferno  = build_map_signature(inferno_paths,  bins=BINS)
+    sig_mirage = build_map_signature(mirage_paths,  bins=BINS)
+    sig_train  = build_map_signature(train_paths,  bins=BINS)
 
     map_signatures = {
         "Ancient": sig_ancient,
         "Nuke":    sig_nuke,
-        "Anubis":  sig_anubis
+        "Anubis":  sig_anubis,
+        "Dust2":  sig_dust2,
+        "Inferno":  sig_dust2,
+        "Mirage":  sig_mirage,
+        "Train":  sig_train,
+
     }
 
     # 2) Lecture de l'image
