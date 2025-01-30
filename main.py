@@ -122,14 +122,13 @@ def main():
         "Nuke":    sig_nuke,
         "Anubis":  sig_anubis,
         "Dust2":  sig_dust2,
-        "Inferno":  sig_dust2,
+        "Inferno":  sig_inferno,
         "Mirage":  sig_mirage,
         "Train":  sig_train,
-
     }
 
     # 2) Lecture de l'image
-    img_path = "test_screenshot_ancient.png"  # A adapter
+    img_path = "1.png"  # A adapter
     img = cv2.imread(img_path)
     if img is None:
         print(f"[ERREUR] Impossible de lire {img_path}")

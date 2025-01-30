@@ -2,235 +2,182 @@ import os
 import cv2
 import numpy as np
 import easyocr
-
-from flask import Flask, request, render_template, jsonify
+from flask import Flask, request, render_template, jsonify, send_from_directory, url_for
 
 ###############################
-# Paramètres GLOBAUX du pipeline
+# Paramètres GLOBAUX
 ###############################
-DEBUG = True
-DEBUG_DIR = "debug_cs2_project"
-
-# 1) Pour la détection de MAP (Ancient, Nuke, Anubis)
 BINS = 32
-
-# 2) Pour la zone scoreboard
-ROI_TOP    = 0.00
+ROI_TOP = 0.00
 ROI_BOTTOM = 0.20
-ROI_LEFT   = 0.40
-ROI_RIGHT  = 0.60
-
-CROP_SIDE_LEFT  = 90
+ROI_LEFT = 0.40
+ROI_RIGHT = 0.60
+CROP_SIDE_LEFT = 90
 CROP_SIDE_RIGHT = 90
-KEEP_TOP_HALF   = True
+KEEP_TOP_HALF = True
 
-# Liste combos (pour info)
-RESIZE_FACTORS = [1.0, 2.0]
-THRESHOLDS = [
-    ("none",       False, False),
-    ("binary",     True,  False),
-    ("binary_inv", True,  True)
-]
-THRESH_VAL = 160
-
-###############################
-# Flask
-###############################
+# Config Flask
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = './uploads'
+app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 
 # Init EasyOCR
-reader = easyocr.Reader(['en'], gpu=True)  # si tu as CUDA; sinon gpu=False
+reader = easyocr.Reader(['en'], gpu=True)
 
 ###############################
-# Fonctions pipeline
+# Fonctions Utilitaires
 ###############################
-def ensure_debug_dir():
-    if not os.path.exists(DEBUG_DIR):
-        os.makedirs(DEBUG_DIR)
+def ensure_upload_dir():
+    """Crée le dossier uploads si nécessaire."""
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    print(f"[DEBUG] Upload directory: {app.config['UPLOAD_FOLDER']}")
 
-def debug_save(filename, img):
-    path = os.path.join(DEBUG_DIR, filename)
+def save_image_in_uploads(filename, img):
+    """Enregistre une image dans le répertoire uploads."""
+    path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     cv2.imwrite(path, img)
     print(f"[DEBUG] Saved => {path}")
-
-def compute_hist(image, bins=32):
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    hist = cv2.calcHist([hsv],[0,1],None,[bins,bins],[0,180,0,256])
-    cv2.normalize(hist, hist, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
-    return hist
-
-def classify_map(img, map_signatures, bins=32):
-    hist_img = compute_hist(img, bins)
-    best_map = None
-    best_score = -999
-    for map_name, sig in map_signatures.items():
-        score = cv2.compareHist(hist_img, sig, cv2.HISTCMP_CORREL)
-        if score>best_score:
-            best_score = score
-            best_map = map_name
-    return best_map, best_score
-
-def build_map_signature(image_paths, bins=32):
-    signature = np.zeros((bins,bins), dtype=np.float32)
-    count=0
-    for p in image_paths:
-        im = cv2.imread(p)
-        if im is None:
-            print(f"[WARN] Impossible de lire {p}")
-            continue
-        h = compute_hist(im, bins)
-        signature += h
-        count+=1
-    if count>0:
-        signature /= count
-    return signature
+    return path
 
 def list_files(folder):
-    exts = (".jpg",".png",".jpeg")
-    allp = []
-    if not os.path.isdir(folder):
-        print(f"[WARN] Dossier introuvable : {folder}")
-        return allp
-    for fname in os.listdir(folder):
-        fpath = os.path.join(folder,fname)
-        if os.path.isfile(fpath) and fpath.lower().endswith(exts):
-            allp.append(fpath)
-    return allp
+    exts = (".jpg", ".png", ".jpeg")
+    return [os.path.join(folder, f) for f in os.listdir(folder) if f.lower().endswith(exts)]
 
 ###############################
-# Charger la signature de map au démarrage
+# Fonctions pour Signature de Map
 ###############################
-map_signatures = {}
+def compute_hist(image, bins=BINS):
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    hist = cv2.calcHist([hsv], [0, 1], None, [bins, bins], [0, 180, 0, 256])
+    return cv2.normalize(hist, hist, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
+
+def build_map_signature(image_paths, bins=BINS):
+    signature = np.zeros((bins, bins), dtype=np.float32)
+    count = 0
+    for path in image_paths:
+        img = cv2.imread(path)
+        if img is not None:
+            signature += compute_hist(img, bins)
+            count += 1
+    return signature / count if count > 0 else signature
+
+def classify_map(img, map_signatures, bins=BINS):
+    hist_img = compute_hist(img, bins)
+    best_map, best_score = None, -999
+    for map_name, signature in map_signatures.items():
+        score = cv2.compareHist(hist_img, signature, cv2.HISTCMP_CORREL)
+        if score > best_score:
+            best_map, best_score = map_name, score
+    return best_map, best_score
+
+###############################
+# Chargement des signatures de map
+###############################
 def init_map_signatures():
-    # ex. dataset/ancient, dataset/nuke, dataset/anubis
-    ancient_paths = list_files("../dataset/ancient")
-    nuke_paths    = list_files("../dataset/nuke")
-    anubis_paths  = list_files("../dataset/anubis")
-
-    sig_ancient = build_map_signature(ancient_paths, bins=BINS)
-    sig_nuke    = build_map_signature(nuke_paths,    bins=BINS)
-    sig_anubis  = build_map_signature(anubis_paths,  bins=BINS)
-
-    return {
-        "Ancient": sig_ancient,
-        "Nuke":    sig_nuke,
-        "Anubis":  sig_anubis
+    map_paths = {
+        "Ancient": list_files("dataset/ancient"),
+        "Nuke": list_files("dataset/nuke"),
+        "Anubis": list_files("dataset/anubis"),
+        "Dust2": list_files("dataset/dust2"),
+        "Inferno": list_files("dataset/inferno"),
+        "Mirage": list_files("dataset/mirage"),
+        "Train": list_files("dataset/train")
     }
+    return {name: build_map_signature(paths) for name, paths in map_paths.items()}
 
 ###############################
-# Pipeline final
+# Analyse de l'image CS2
 ###############################
 def analyze_cs2_image(img_path):
-    """
-    Exécute la logique 'combo_4_none_r2.0'
-    + classification de map
-    + extraction du timer, score
-    """
     img = cv2.imread(img_path)
     if img is None:
         return {"error": f"Impossible de lire {img_path}"}
 
-    # 1) Map
-    detected_map, map_score = classify_map(img, map_signatures, bins=BINS)
+    # 1) Classification de la map
+    detected_map, _ = classify_map(img, map_signatures)
 
-    # 2) ROI scoreboard
+    # 2) Extraction du scoreboard
     h, w = img.shape[:2]
-    top    = int(ROI_TOP*h)
-    bottom = int(ROI_BOTTOM*h)
-    left   = int(ROI_LEFT*w)
-    right  = int(ROI_RIGHT*w)
-    scoreboard_roi = img[top:bottom, left:right].copy()
+    top, bottom, left, right = int(ROI_TOP * h), int(ROI_BOTTOM * h), int(ROI_LEFT * w), int(ROI_RIGHT * w)
+    scoreboard_roi = img[top:bottom, left:right]
 
-    # Retrait 90 px
-    sb_h, sb_w = scoreboard_roi.shape[:2]
-    new_left  = CROP_SIDE_LEFT
-    new_right = sb_w - CROP_SIDE_RIGHT
-    if new_right <= new_left:
-        return {"error": "recadrage trop large => new_right<=new_left."}
-
-    scoreboard_narrow = scoreboard_roi[:, new_left:new_right].copy()
-
-    # Conserver la moitié haute
+    scoreboard_narrow = scoreboard_roi[:, CROP_SIDE_LEFT:scoreboard_roi.shape[1] - CROP_SIDE_RIGHT]
     if KEEP_TOP_HALF:
-        nh, nw = scoreboard_narrow.shape[:2]
-        scoreboard_narrow = scoreboard_narrow[:nh//2, :]
+        scoreboard_narrow = scoreboard_narrow[:scoreboard_narrow.shape[0] // 2]
 
-    # On applique "combo_4_none_r2.0" => gris, resize x2, pas de threshold
+    # 3) Prétraitement et OCR
     gray = cv2.cvtColor(scoreboard_narrow, cv2.COLOR_BGR2GRAY)
-    resize_factor=2.0
-    new_w = int(gray.shape[1]*resize_factor)
-    new_h = int(gray.shape[0]*resize_factor)
-    gray = cv2.resize(gray, (new_w,new_h), interpolation=cv2.INTER_CUBIC)
-
-    # OCR
+    gray = cv2.resize(gray, (gray.shape[1] * 2, gray.shape[0] * 2), interpolation=cv2.INTER_CUBIC)
     results = reader.readtext(gray, detail=1)
 
-    texts_list = [r[1] for r in results]
-    # ex. on attend au moins 3 blocs => timer, ct_score, t_score
-    if len(texts_list) < 3:
-        return {
-          "detected_map": detected_map,
-          "timer": "??:??",
-          "ct_score": -1,
-          "t_score": -1
-        }
+    texts = [r[1] for r in results]
+    timer, ct_score, t_score = "??:??", -1, -1
+    if len(texts) >= 3:
+        timer = texts[0].replace('.', ':') if '.' in texts[0] else texts[0]
+        try:
+            ct_score, t_score = int(texts[1]), int(texts[2])
+        except ValueError:
+            pass
 
-    timer = texts_list[0]
-    # Correction . => :
-    if '.' in timer and len(timer)<=4:
-        timer=timer.replace('.',':')
+    # Générer l'image annotée
+    dbg_img = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+    for (coords, txt, _) in results:
+        x_min, y_min = int(min(p[0] for p in coords)), int(min(p[1] for p in coords))
+        x_max, y_max = int(max(p[0] for p in coords)), int(max(p[1] for p in coords))
+        cv2.rectangle(dbg_img, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+        cv2.putText(dbg_img, txt, (x_min, y_min - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
-    ct_str = texts_list[1]
-    t_str  = texts_list[2]
-    try:
-        ct_score = int(ct_str)
-        t_score  = int(t_str)
-    except:
-        ct_score=-1
-        t_score=-1
+
+    debug_filename = os.path.basename(img_path).replace('.', '_annot.')
+    save_image_in_uploads(debug_filename, dbg_img)
 
     return {
-      "detected_map": detected_map,
-      "timer": timer,
-      "ct_score": ct_score,
-      "t_score": t_score
+        "detected_map": detected_map,
+        "timer": timer,
+        "ct_score": ct_score,
+        "t_score": t_score,
+        "original_image_url": f"/uploads/{os.path.basename(img_path)}",
+        "debug_image_url": f"/uploads/{debug_filename}"
     }
 
 ###############################
-# ROUTES FLASK
+# Routes Flask
 ###############################
 @app.route('/')
 def index():
-    # Page HTML -> templates/index.html
     return render_template('index.html')
 
 @app.route('/upload', methods=['POST'])
 def upload():
-    # Récupérer le fichier
     file = request.files.get('file')
     if not file:
-        return jsonify({"error":"No file"}), 400
+        return jsonify({"error": "No file provided"}), 400
 
-    # Sauvegarde
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
-    file.save(filepath)
+    filename = file.filename
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    ensure_upload_dir()  # S'assurer que le dossier existe avant la sauvegarde
+    
+    try:
+        file.save(filepath)
+        print(f"[DEBUG] Fichier sauvegardé : {filepath}")
+    except Exception as e:
+        print(f"[ERROR] Erreur lors de la sauvegarde : {e}")
+        return jsonify({"error": f"File save failed: {str(e)}"}), 500
 
-    # Analyse
     result_data = analyze_cs2_image(filepath)
     return jsonify(result_data)
 
-###############################
-# LANCEMENT
-###############################
-if __name__=="__main__":
-    # 1) Créer le dossier uploads/
-    if not os.path.exists(app.config['UPLOAD_FOLDER']):
-        os.makedirs(app.config['UPLOAD_FOLDER'])
-    # 2) Créer le dossier debug
-    ensure_debug_dir()
-    # 3) Charger la signature des maps
-    map_signatures = init_map_signatures()
 
-    # 4) Lancer Flask
+@app.route('/uploads/<filename>')
+def serve_uploads(filename):
+    try:
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    except Exception as e:
+        print(f"[ERROR] Failed to serve file {filename}: {e}")
+        return f"File not found: {filename}", 404
+###############################
+# Lancement Flask
+###############################
+if __name__ == "__main__":
+    ensure_upload_dir()
+    map_signatures = init_map_signatures()
     app.run(debug=True)

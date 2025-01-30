@@ -1,29 +1,23 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>CS2 Analyser</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>CS2 Analyser</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <h1>CS2 Analyser</h1>
+    <h1>CS2 Analyser</h1>
+    <form action="/upload" method="post" enctype="multipart/form-data" id="uploadForm">
+        <label>Choisis une image CS2 :</label>
+        <input type="file" name="file" accept="image/*"/>
+        <button type="submit">Analyser</button>
+    </form>
 
-  <!-- Formulaire fallback -->
-  <form action="/upload" method="post" enctype="multipart/form-data" id="uploadForm">
-    <label>Choisis une image CS2 :</label>
-    <input type="file" name="file" accept="image/*"/>
-    <button type="submit">Analyser</button>
-  </form>
+    <div class="dropzone" id="dropzone">
+        <p>Glisse ton image CS2 ici</p>
+    </div>
 
-  <hr>
+    <div id="result"></div>
 
-  <!-- Zone de drag & drop -->
-  <div class="dropzone" id="dropzone">
-    <p>Glisse ton image CS2 ici</p>
-  </div>
-
-  <!-- Div pour le résultat en direct (via JS) -->
-  <div id="result"></div>
-
-  <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
