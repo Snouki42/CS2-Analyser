@@ -33,14 +33,14 @@ function showResults(data) {
                 <h3>Image originale</h3>
                 <img src="${data.original_image_url}" 
                      alt="Original" 
-                     style="max-width: 100%;"
+                     style="max-width: 75%;"
                      onerror="this.onerror=null; showError('Impossible de charger l\'image originale')"/>
             </div>
             <div class="image-container">
                 <h3>Image annotée</h3>
                 <img src="${data.debug_image_url}" 
                      alt="Debug" 
-                     style="max-width: 100%;"
+                     style="max-width: 75%;"
                      onerror="this.onerror=null; showError('Impossible de charger l\'image annotée')"/>
             </div>
         </div>
