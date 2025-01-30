@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Résultat de l'analyse</title>
+</head>
+<body>
+  <h2>Résultat</h2>
+
+  {% if error %}
+    <p>{{ error }}</p>
+  {% else %}
+    <p>Map détectée : {{ detected_map }}</p>
+    <p>Timer : {{ timer }}</p>
+    <p>Score CT-T : {{ ct_score }} - {{ t_score }}</p>
+  {% endif %}
+
+  <a href="{{ url_for('index') }}">Retour à l'accueil</a>
+</body>
+</html>
