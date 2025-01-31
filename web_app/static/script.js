@@ -28,17 +28,18 @@ function showResults(data) {
         <p>Map détectée : ${data.detected_map}</p>
         <p>Timer : ${data.timer}</p>
         <p>Score CT-T : ${data.ct_score} - ${data.t_score}</p>
+        <p>Argent CT-T : ${data.ct_economie}$ - ${data.t_economie}$</p>
         <div class="images">
             <div class="image-container">
                 <h3>Image originale</h3>
-                <img src="${data.original_image_url}" 
+                <img src="/static/debug_cs2_project/0_input_image.png" 
                      alt="Original" 
                      style="max-width: 100%;"
                      onerror="this.onerror=null; showError('Impossible de charger l\'image originale')"/>
             </div>
             <div class="image-container">
                 <h3>Image annotée</h3>
-                <img src="${data.debug_image_url}" 
+                 <img src="/static/debug_cs2_project/combo_4_none_r2.0_annot.png" 
                      alt="Debug" 
                      style="max-width: 100%;"
                      onerror="this.onerror=null; showError('Impossible de charger l\'image annotée')"/>

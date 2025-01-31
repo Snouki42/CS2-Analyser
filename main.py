@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import os
 import easyocr
+import re
 
 ###############################
 # PARAMÈTRES GLOBAUX
@@ -9,18 +10,18 @@ import easyocr
 
 DEBUG = True
 DEBUG_DIR = "debug_cs2_project"
+CONFIDENCE_THRESHOLD = 0.12
 
 # 1) Pour la détection de MAP (Ancient, Nuke, Anubis)
 BINS = 32
-MAP_NAMES = ["Ancient", "Nuke", "Anubis"]
 # On suppose un dossier dataset/ancient, dataset/nuke, dataset/anubis
 # Chacun contenant quelques images représentatives.
 
 # 2) Pour la zone scoreboard
 ROI_TOP    = 0.00
-ROI_BOTTOM = 0.20
-ROI_LEFT   = 0.40
-ROI_RIGHT  = 0.60
+ROI_BOTTOM = 0.25
+ROI_LEFT   = 0.20
+ROI_RIGHT  = 0.80
 
 # Retirer 90 px à gauche/droite
 CROP_SIDE_LEFT  = 90
@@ -96,6 +97,7 @@ reader = easyocr.Reader(['en'], gpu=True)
 # MAIN
 ###############################
 def main():
+    timer_passed = False
                             
     ensure_debug_dir()
 
@@ -105,7 +107,6 @@ def main():
     nuke_paths    = list_files("dataset/nuke")
     anubis_paths  = list_files("dataset/anubis")
     dust2_paths = list_files("dataset/dust2")
-    inferno_paths = list_files("dataset/inferno")
     mirage_paths = list_files("dataset/mirage")
     train_paths = list_files("dataset/train")
 
@@ -113,7 +114,6 @@ def main():
     sig_nuke    = build_map_signature(nuke_paths,    bins=BINS)
     sig_anubis  = build_map_signature(anubis_paths,  bins=BINS)
     sig_dust2  = build_map_signature(dust2_paths,  bins=BINS)
-    sig_inferno  = build_map_signature(inferno_paths,  bins=BINS)
     sig_mirage = build_map_signature(mirage_paths,  bins=BINS)
     sig_train  = build_map_signature(train_paths,  bins=BINS)
 
@@ -122,7 +122,6 @@ def main():
         "Nuke":    sig_nuke,
         "Anubis":  sig_anubis,
         "Dust2":  sig_dust2,
-        "Inferno":  sig_inferno,
         "Mirage":  sig_mirage,
         "Train":  sig_train,
     }
@@ -194,29 +193,68 @@ def main():
     results = reader.readtext(proc, detail=1)
     # Annot
     dbg = cv2.cvtColor(proc, cv2.COLOR_GRAY2BGR) if len(proc.shape) == 2 else proc.copy()
+    filtered_results = []
+
     for (coords, txt, conf) in results:
-        xs = [p[0] for p in coords]
-        ys = [p[1] for p in coords]
-        x_min, x_max = int(min(xs)), int(max(xs))
-        y_min, y_max = int(min(ys)), int(max(ys))
+        print(f"txt: {txt}")
+        if conf < CONFIDENCE_THRESHOLD:
+            continue  # Skip results below the confidence threshold  
+        if '.' in txt or '-' in txt or ':' in txt or timer_passed:
+            timer_passed = True
+            print(f"timer passed: {timer_passed}")
+        else:
+            continue
 
-        if '.' in txt and len(txt) <= 4:
+        if timer_passed:
+            filtered_results.append((coords, txt, conf))
+
+        for (coords, txt, conf) in filtered_results:
+            xs = [p[0] for p in coords]
+            ys = [p[1] for p in coords]
+            x_min, x_max = int(min(xs)), int(max(xs))
+            y_min, y_max = int(min(ys)), int(max(ys))
+
+            print(f"text : {txt} ")
             txt = txt.replace('.', ':')
+            txt = txt.replace('-', ':')
+            txt = txt.replace('S', '')
+            print(f"text changé : {txt} ")
 
-        cv2.rectangle(dbg, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-        cv2.putText(dbg, txt, (x_min, y_min - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            cv2.rectangle(dbg, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+            cv2.putText(dbg, txt, (x_min, y_min - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
+    print(f"[INFO FINI] {combo_label} => {len(filtered_results)} blocs =>", [r[1] for r in filtered_results])
     dbg_name = f"{combo_label}_annot.png"
     debug_save(dbg_name, dbg)
 
     # e) Log les textes
-    texts_list = [r[1] for r in results]
-    print(f"[INFO] {combo_label} => {len(results)} blocs =>", texts_list)
+    texts_list = [r[1].replace('.', ':').replace('-', ':').replace('S', '').replace('s', '')for r in filtered_results]
+    print(f"[INFO] {combo_label} => {len(filtered_results)} blocs =>", texts_list)
+    timer = texts_list[0]
+    ct_score = int(texts_list[1])
+    t_score = int(texts_list[2])
+    if len(texts_list) >= 13:
+        if not texts_list[3].endswith('0'):
+            texts_list.pop(3)
+            if not texts_list[3].endswith('0'):
+                texts_list.pop(3)
 
-    if len(texts_list) >= 3:
-        timer = texts_list[0].replace('.', ':')
-        ct_score = int(texts_list[1])
-        t_score = int(texts_list[2])
+        for i in range(3, 13):
+            texts_list[i] = re.sub(r'\D', '0', texts_list[i])
+
+            value = int(texts_list[i])
+            if value > 16000:
+                texts_list[i] = texts_list[i][1:]  # Remove the first character
+
+        ct_economie = sum(int(text) for text in texts_list[3:8])
+        t_economie = sum(int(text) for text in texts_list[8:13])
+    else:
+        ct_economie = 0
+        t_economie = 0
+
+    print(f"tableau final : {texts_list}")
+
+    print(f"CT Économie: {ct_economie}, T Économie: {t_economie}")
     
     print(f"Timer: {timer}, CT Score: {ct_score}, T Score: {t_score}")
 
