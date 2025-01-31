@@ -32,14 +32,14 @@ function showResults(data) {
         <div class="images">
             <div class="image-container">
                 <h3>Image originale</h3>
-                <img src="/static/debug_cs2_project/0_input_image.png" 
+                <img src="${data.original_image_url}" 
                      alt="Original" 
                      style="max-width: 100%;"
                      onerror="this.onerror=null; showError('Impossible de charger l\'image originale')"/>
             </div>
             <div class="image-container">
                 <h3>Image annotée</h3>
-                 <img src="/static/debug_cs2_project/combo_4_none_r2.0_annot.png" 
+                 <img src="${data.debug_image_url}" 
                      alt="Debug" 
                      style="max-width: 100%;"
                      onerror="this.onerror=null; showError('Impossible de charger l\'image annotée')"/>

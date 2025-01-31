@@ -9,7 +9,7 @@ from flask import Flask, request, render_template, jsonify, send_from_directory,
 # PARAMÈTRES GLOBAUX
 ###############################
 DEBUG = True
-DEBUG_DIR = "C:\WorkSpace\ISEN\CS\CS2-Analyser\web_app\static\debug_cs2_project"
+DEBUG_DIR = "C:\WorkSpace\ISEN\CS2-Project\CS2-Analyser-v1.0\web_app\static\debug_cs2_project"
 CONFIDENCE_THRESHOLD = 0.12
 
 # 1) Pour la détection de MAP (Ancient, Nuke, Anubis)
@@ -284,7 +284,9 @@ def analyze_cs2_image(img_path):
         "t_score": t_score,
         "texts_list": texts_list,
         "ct_economie": ct_economie,
-        "t_economie": t_economie
+        "t_economie": t_economie,
+        "original_image_url" : f"/uploads/{os.path.basename(img_path)}",
+        "debug_image_url": f"/static/debug_cs2_project/{os.path.basename(dbg_name)}"
     }
 
 ###############################
